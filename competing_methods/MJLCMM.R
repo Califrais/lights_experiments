@@ -34,7 +34,7 @@ MJLCMM_score <- function(trained_long_model, trained_joint_model, time_indep_fea
     for(i in 1:length(time_indep_feat)){
         mixture_form[i] <- paste("mixture(", time_indep_feat[i], ")")
     }
-    survival_form <- as.formula(paste("Surv(T_survival, delta) ~ ", paste(mixture_form, collapse = ' + ')))
+    survival_form <- as.formula(paste("Surv(T_max, delta) ~ ", paste(mixture_form, collapse = ' + ')))
     mjlcmm_pred <- do.call(mpjlcmm, list(longitudinal = list(trained_long_model), B = trained_joint_model$best,
                          maxiter = 0, subject = "id", ng = 2, data = data,
                          classmb = classmb_form, survival = survival_form,

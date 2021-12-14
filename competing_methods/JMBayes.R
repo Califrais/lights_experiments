@@ -31,8 +31,9 @@ fit <- function(data, time_dep_feat, time_indep_feat) {
 }
 
 
-score <- function(trained_model, data, t_max) {
+score <- function(trained_model, data) {
     # predictive marker
+    t_max <- data$T_max
     data$delta[which(data$T_survival> t_max)] <- 0
     data$T_survival[which(data$T_survival > t_max)] <- t_max
     #pbc2_jmbayes_pred <- survfitJM(object = trained_model, newdata = data,

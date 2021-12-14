@@ -56,7 +56,7 @@ lfeatures <- function(model, formFixed, formRandom, derivForm=NULL, areaForm=NUL
     return(out)
 }
 
-Cox_get_long_feat <- function(data, time_dep_feat, time_indep_feat) {
+Cox_get_long_feat <- function(data, time_dep_feat) {
     # all features
     X <- c()
     data.id <- data[!duplicated(as.integer(data[all.vars(~id)][, 1])), ]
