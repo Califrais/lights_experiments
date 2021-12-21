@@ -36,11 +36,6 @@ score <- function(trained_model, data) {
     t_max <- data$T_max
     data$delta[which(data$T_survival> t_max)] <- 0
     data$T_survival[which(data$T_survival > t_max)] <- t_max
-    #pbc2_jmbayes_pred <- survfitJM(object = trained_model, newdata = data,
-    #last.time= t_max, survTimes = t_max+2, idVar = "id")
-    #pbc2_jmbayes_pred
-
-    #return(pbc2_jmbayes_pred)
 
     JMbayes_marker <- lights_JMbayes_marker(object = trained_model, newdata = data,
     last.time = t_max, survTimes = t_max, idVar = "id", simulate = TRUE)
@@ -353,12 +348,7 @@ lights_JMbayes_marker <- function (object,
   if(length(names(object$model_info$Formulas))!=length(object$statistics$postModes$alphas))
     stop("Number of shared associations is not equal to the number of coefficients for shared association \n")
 
-  # id <- as.numeric(unclass(newdata[[idVar]]))
-  # id <- id. <- match(id, unique(id))
-  # n.id <- length(unique(id))
   newdata.id <- newdata[!duplicated(newdata$id), ]
-  # idT <- data.id[[idVar]]
-  # idT <- match(idT, unique(idT))
 
   # time-independent design vector for baseline regression
   mfZ <- model.frame(formula(object$model_info$coxph_components$Terms), data = newdata.id)
