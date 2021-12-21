@@ -8,7 +8,7 @@ library(lcmm)
 # joint model including 2 classes specify longitudinal model for 2 classes,
 # without estimation B
 
-MJLCMM_fit <- function(data, time_dep_feat, time_indep_feat, alpha) {
+MJLCMM_fit <- function(data, time_dep_feat, time_indep_feat) {
     fixed_form <<- formula(paste(paste(time_dep_feat, collapse = ' + '), " ~ T_long + I(T_long^2)"))
     long_model <- do.call(multlcmm, args = list(fixed_form, random = ~T_long, subject = "id",
                             nwg = TRUE, ng = 2, mixture = ~T_long + I(T_long^2),
