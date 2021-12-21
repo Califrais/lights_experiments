@@ -2,7 +2,6 @@ import os
 os.environ['R_HOME'] = "/Library/Frameworks/R.framework/Versions/4.0/Resources"
 from rpy2 import robjects
 from rpy2.robjects import pandas2ri, numpy2ri
-from sklearn.preprocessing import LabelEncoder
 import numpy as np
 from lights.inference import prox_QNMCEM
 from prettytable import PrettyTable
@@ -37,6 +36,7 @@ def load_data(simu):
         # generate t_max
         a = 2
         b = 5
+        np.random.seed(0)
         r = beta.rvs(a, b, size=n_samples)
         t_max = T * (1 - r)
         for i in range(n_samples):
@@ -71,15 +71,17 @@ def load_data(simu):
 
     else:
         # load PBC Seq
-        robjects.r.source(os.getcwd() + "/competing_methods/load_PBC_Seq.R")
-        time_dep_feat = ["serBilir", "SGOT", "albumin"]
-        time_indep_feat = ["age", "drug", "sex"]
+        robjects.r.source(os.getcwd() + "/lights/competing_methods/load_PBC_Seq.R")
+        time_indep_feat = ['drug', 'age', 'sex']
+        time_dep_feat = ['serBilir', 'albumin', 'SGOT', 'platelets',
+                         'prothrombin', 'alkaline', 'serChol']
         data_R = robjects.r["load"]()
         # TODO: encoder and normalize
         data = pd.DataFrame(data_R).T
         data.columns = data_R.colnames
-        data["drug"] = LabelEncoder().fit_transform(data["drug"])
-        data["sex"] = LabelEncoder().fit_transform(data["sex"])
+        data = data[(data > -1e-4).all(axis=1)]
+        for feat in time_dep_feat:
+            data[feat] = np.log(data[feat].values)
         id_list = np.unique(data["id"])
         n_samples = len(id_list)
         n_long_features = len(time_dep_feat)
@@ -88,6 +90,7 @@ def load_data(simu):
         # generate t_max
         a = 2
         b = 5
+        np.random.seed(0)
         r = beta.rvs(a, b, size=n_samples)
         T = data_lights["T_survival"].values
         t_max = T * (1 - r)
@@ -97,16 +100,16 @@ def load_data(simu):
         for i in range(n_samples):
             tmp = data[(data["id"] == id_list[i]) & (data["T_long"] < t_max[i])]
             if tmp.empty:
-                t_max[i] = data[(data["id"] == id_list[i])]["T_long"][0]
+                t_max[i] = data[(data["id"] == id_list[i])]["T_long"].values[0]
                 n_i = 1
             else:
                 n_i = tmp.shape[0]
             data = data[(data["id"] != id_list[i]) |
-                    ((data["id"] == id_list[i]) & (data["T_long"] < t_max[i]))]
+                    ((data["id"] == id_list[i]) & (data["T_long"] <= t_max[i]))]
             y_i = []
             for l in range(n_long_features):
                 Y_il = data[["T_long", time_dep_feat[l]]][
-                    (data["id"] == id_list[i]) & (data['T_long'] < t_max[i])]
+                    (data["id"] == id_list[i]) & (data['T_long'] <= t_max[i])]
                 # TODO: Add value of 1/365 (the first day of survey instead of 0)
                 y_i += [pd.Series(Y_il[time_dep_feat[l]].values,
                                   index=Y_il["T_long"].values + 1 / 365)]
@@ -183,8 +186,7 @@ def all_model(n_runs = 1, simu=True):
         robjects.r.source(os.getcwd() + "/competing_methods/MJLCMM.R")
         trained_long_model, trained_mjlcmm = robjects.r["MJLCMM_fit"](data_R_train,
                                              robjects.StrVector(time_dep_feat),
-                                             robjects.StrVector(time_indep_feat),
-                                             alpha=2)
+                                             robjects.StrVector(time_indep_feat))
         MJLCMM_pred = robjects.r["MJLCMM_score"](trained_long_model,
                                                  trained_mjlcmm,
                                                  time_indep_feat, data_R_test)
