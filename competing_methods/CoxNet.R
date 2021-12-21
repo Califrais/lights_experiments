@@ -8,7 +8,7 @@ library(glmnet)
 
 # function to get features
 lfeatures <- function(model, formFixed, formRandom, derivForm=NULL, areaForm=NULL, data.id, col_name = "") {
-    data.id$T_long <- data.id$T_survival
+    #data.id$T_long <- data.id$T_survival
 
     # subject-specific random effects
     b.id <- as.matrix(model$predRE, ncol = 1)
@@ -65,11 +65,15 @@ Cox_get_long_feat <- function(data, time_dep_feat) {
     for(i in 1:length(time_dep_feat)) {
         formFixed = as.formula(paste(time_dep_feat[[i]], " ~ T_long + I(T_long^2)"))
         formRandom = ~T_long
-        derivForm = list(fixed = ~I(2 * T_long), random = ~1, indFixed = c(2, 3), indRandom = c(2))
-        areaForm = list(fixed = ~-1 + T_long + I(T_long^2/2) + I(T_long^3/3),
-        random = ~-1 + T_long + I(T_long^2/2), indFixed = NULL, indRandom = NULL)
         long_model[[i]] <- hlme(fixed = formFixed, random = formRandom,
         subject = "id", ng = 1, data = data)
+
+        # extract features at t_max
+        formFixed = as.formula(paste(time_dep_feat[[i]], " ~ T_max + I(T_max^2)"))
+        formRandom = ~T_max
+        derivForm = list(fixed = ~I(2 * T_max), random = ~1, indFixed = c(2, 3), indRandom = c(2))
+        areaForm = list(fixed = ~-1 + T_max + I(T_max^2/2) + I(T_max^3/3),
+        random = ~-1 + T_long + I(T_max^2/2), indFixed = NULL, indRandom = NULL)
         long_feat[[i]] <- lfeatures(model = long_model[[i]],
                                formFixed = formFixed, formRandom = formRandom,
                                derivForm = derivForm, areaForm = areaForm,
@@ -99,7 +103,7 @@ Cox_fit <- function(X, T, delta, lambda) {
 
 Cox_score <- function(trained_model, X) {
     # predictive marker
-    p_coxph_en <- predict(trained_model, newx = X, type = "response")
+    p_coxph_en <- as.vector(exp(X%*%coef(trained_model)))
 
     return(p_coxph_en)
 }
