@@ -3,7 +3,7 @@ os.environ['R_HOME'] = "/Library/Frameworks/R.framework/Versions/4.0/Resources"
 from rpy2 import robjects
 from rpy2.robjects import pandas2ri, numpy2ri
 import numpy as np
-from lights.inference import prox_QNMCEM
+from lights.inference import prox_QNEM
 from prettytable import PrettyTable
 from lifelines.utils import concordance_index as c_index_score
 from time import time
@@ -19,8 +19,8 @@ def load_data(simu):
                                              n_long_features=n_long_features,
                                              n_samples=n_samples,
                                              n_time_indep_features=n_time_indep_features,
-                                             sparsity=0.5)
-        X, Y, T, delta, _ = simu.simulate()
+                                             sparsity=0.5, grid_time=True)
+        X, Y, T, delta, _, Y_tsfresh, t_max = simu.simulate()
         id = np.arange(n_samples)
         time_dep_feat = ['long_feature_%s' % (l + 1)
                          for l in range(n_long_features)]
@@ -31,34 +31,15 @@ def load_data(simu):
                             columns=["id", "T_survival", "delta"] +
                                     time_indep_feat + time_dep_feat)
         df1 = pd.DataFrame(data=np.column_stack((id, T, delta, X)),
-                           columns=["id", "T_survival", "delta"] +
-                                   time_indep_feat)
-        # generate t_max
-        a = 2
-        b = 5
-        np.random.seed(0)
-        r = beta.rvs(a, b, size=n_samples)
-        t_max = T * (1 - r)
+                           columns=["id", "T_survival", "delta"] + time_indep_feat)
         for i in range(n_samples):
             Y_i_ = []
             for l in range(n_long_features):
                 Y_il = Y.loc[i][l]
                 times_il = Y_il.index.values
-                t_long_chosen = (times_il <= t_max[i])
-                if not np.any(t_long_chosen):
-                    t_max[i] = times_il[0]
-                    t_long_chosen = (times_il <= t_max[i])
-                times_il = times_il[t_long_chosen]
-                y_il = Y_il.values.flatten()[t_long_chosen].tolist()
+                y_il = Y_il.values.flatten().tolist()
                 n_il = len(times_il)
-                tmp = data_lights.loc[i, time_dep_feat[l]]
-                if tmp[tmp.index.values <= t_max[i]].empty:
-                    data_lights[time_dep_feat[l]][i] = tmp[tmp.index.values == tmp.index.values[0]]
-                    t_max[i] = tmp.index.values[0]
-                else:
-                    data_lights[time_dep_feat[l]][i] = tmp[tmp.index.values <= t_max[i]]
                 Y_i_.append(y_il)
-
             Y_i = np.column_stack(
                 (np.array([id[i]] * n_il), times_il, np.array([t_max[i]] * n_il), np.array(Y_i_).T))
             if i == 0:
@@ -68,10 +49,9 @@ def load_data(simu):
         data_lights["T_max"] = t_max
         df2 = pd.DataFrame(data=Y_, columns=["id", "T_long", "T_max"] + time_dep_feat)
         data = pd.merge(df2, df1, on="id")
-
     else:
         # load PBC Seq
-        robjects.r.source(os.getcwd() + "/lights/competing_methods/load_PBC_Seq.R")
+        robjects.r.source(os.getcwd() + "/competing_methods/load_PBC_Seq.R")
         time_indep_feat = ['drug', 'age', 'sex']
         time_dep_feat = ['serBilir', 'albumin', 'SGOT', 'platelets',
                          'prothrombin', 'alkaline', 'serChol']
@@ -97,6 +77,7 @@ def load_data(simu):
 
         Y = []
         t_max_R = []
+        Y_tsfresh = pd.DataFrame(columns=["id", "time", "kind", "value"])
         for i in range(n_samples):
             tmp = data[(data["id"] == id_list[i]) & (data["T_long"] < t_max[i])]
             if tmp.empty:
@@ -111,14 +92,21 @@ def load_data(simu):
                 Y_il = data[["T_long", time_dep_feat[l]]][
                     (data["id"] == id_list[i]) & (data['T_long'] <= t_max[i])]
                 # TODO: Add value of 1/365 (the first day of survey instead of 0)
-                y_i += [pd.Series(Y_il[time_dep_feat[l]].values,
-                                  index=Y_il["T_long"].values + 1 / 365)]
+                y_il = Y_il[time_dep_feat[l]].values
+                t_il = Y_il["T_long"].values + 1/365
+                n_il = len(t_il)
+                y_i += [pd.Series(y_il, index=t_il)]
+                tmp = {"id": [i] * n_il,
+                      "time": t_il,
+                      "kind": ["long_feat_" + str(l)] * n_il,
+                      "value": y_il}
+                Y_tsfresh = Y_tsfresh.append(pd.DataFrame(tmp), ignore_index=True)
             Y.append(y_i)
             t_max_R += [t_max[i]] * n_i
         data_lights[time_dep_feat] = Y
         data_lights["T_max"] = t_max
         data["T_max"] = np.array(t_max_R).flatten()
-    return (data, data_lights, time_dep_feat, time_indep_feat)
+    return (data, data_lights, Y_tsfresh, time_dep_feat, time_indep_feat)
 
 def extract_lights_feat(data, time_indep_feat, time_dep_feat):
     X = np.float_(data[time_indep_feat].values)
